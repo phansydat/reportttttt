@@ -20,11 +20,11 @@ const DEFAULT_MAPPING: MappingConfig = {
   productName: 'D',
   customerName: 'E',
   customerAddress: 'E', 
-  cost: 'I',
-  price: 'J',
-  status: 'L', 
+  cost: 'R',
+  price: 'H',
+  status: 'T', 
   tracking: 'N',
-  profit: 'Q'
+  profit: 'S'
 };
 
 const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw_d-djgJFYAbcjGDq7vuXBroth2uL4-SwdcpzgLjnkrbgfabS4yDtKtmeMm4niWhTr/exec';
