@@ -40,10 +40,13 @@ const App: React.FC = () => {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date>(new Date());
   
-  const [currency, setCurrency] = useState(() => localStorage.getItem('appCurrency') || '$');
+  const [currency, setCurrency] = useState(() => localStorage.getItem('appCurrency') || '€');
   const [secondaryCurrency, setSecondaryCurrency] = useState(() => localStorage.getItem('secondaryCurrency') || '₫');
-  const [exchangeRate, setExchangeRate] = useState(() => Number(localStorage.getItem('exchangeRate')) || 25000);
-  const [showConversion, setShowConversion] = useState(() => localStorage.getItem('showConversion') === 'true');
+  const [exchangeRate, setExchangeRate] = useState(() => Number(localStorage.getItem('exchangeRate')) || 29000);
+  const [showConversion, setShowConversion] = useState(() => {
+    const saved = localStorage.getItem('showConversion');
+    return saved !== null ? saved === 'true' : true;
+  });
 
   const [sheetUrl, setSheetUrl] = useState(() => localStorage.getItem('sheetUrl') || DEFAULT_SCRIPT_URL);
   const [sheetName, setSheetName] = useState(() => {
