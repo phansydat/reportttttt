@@ -19,7 +19,7 @@ const DEFAULT_MAPPING: MappingConfig = {
   id: 'C',
   productName: 'D',
   customerName: 'E',
-  customerAddress: 'F', 
+  customerAddress: 'E', 
   cost: 'H',
   price: 'I',
   status: 'K', 
