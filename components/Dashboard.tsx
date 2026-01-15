@@ -11,36 +11,94 @@ interface DashboardProps {
   language: Language;
 }
 
+type TimeFilter = 'All' | 'Today' | 'Last7Days' | 'ThisMonth';
+
 const Dashboard: React.FC<DashboardProps> = ({ onNavigate, orders, currencyContext, language }) => {
   const [aiInsights, setAiInsights] = useState<{ summary: string, strongestChannel: string, recommendation: string } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('All');
   const t = translations[language];
 
   const formatMoney = (val: number, symbol: string) => {
     return `${symbol}${val.toLocaleString()}`;
   };
 
+  const parseFlexibleDate = (dateStr: string): Date | null => {
+    if (!dateStr) return null;
+    const cleanStr = dateStr.trim().split(' ')[0];
+    const parts = cleanStr.split(/[/\-\.]/);
+
+    if (parts.length === 3) {
+      const p1 = parseInt(parts[0], 10);
+      const p2 = parseInt(parts[1], 10);
+      const p3 = parseInt(parts[2], 10);
+
+      if (p3 > 1000) {
+        if (p1 >= 1 && p1 <= 31 && p2 >= 1 && p2 <= 12) {
+          const d = new Date(p3, p2 - 1, p1);
+          if (!isNaN(d.getTime())) return d;
+        }
+      } 
+      else if (p1 > 1000) {
+        if (p2 >= 1 && p2 <= 12 && p3 >= 1 && p3 <= 31) {
+          const d = new Date(p1, p2 - 1, p3);
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+    }
+    const fallbackDate = new Date(dateStr);
+    return isNaN(fallbackDate.getTime()) ? null : fallbackDate;
+  };
+
+  const isWithinTimeRange = (orderDateStr: string, range: TimeFilter) => {
+    if (range === 'All') return true;
+    const orderDate = parseFlexibleDate(orderDateStr);
+    if (!orderDate) return false;
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const orderDay = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate());
+
+    switch (range) {
+      case 'Today': return orderDay.getTime() === today.getTime();
+      case 'Last7Days': {
+        const sevenDaysAgo = new Date(today);
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        return orderDay >= sevenDaysAgo && orderDay <= today;
+      }
+      case 'ThisMonth': {
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        return orderDay >= startOfMonth && orderDay <= today;
+      }
+      default: return true;
+    }
+  };
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o => isWithinTimeRange(o.createdAt, timeFilter));
+  }, [orders, timeFilter]);
+
   const stats = useMemo(() => {
-    const revenue = orders.reduce((a, b) => a + (b.price || 0), 0);
-    const cost = orders.reduce((a, b) => a + (b.cost || 0), 0);
-    const profit = orders.reduce((a, b) => a + (b.profit || 0), 0);
-    const count = orders.length;
+    const revenue = filteredOrders.reduce((a, b) => a + (b.price || 0), 0);
+    const cost = filteredOrders.reduce((a, b) => a + (b.cost || 0), 0);
+    const profit = filteredOrders.reduce((a, b) => a + (b.profit || 0), 0);
+    const count = filteredOrders.length;
     const aov = count > 0 ? revenue / count : 0;
     const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
 
     return { revenue, cost, profit, count, aov, margin };
-  }, [orders]);
+  }, [filteredOrders]);
 
   const channelStats = useMemo(() => {
     const map: Record<string, number> = {};
-    orders.forEach(o => {
+    filteredOrders.forEach(o => {
       const name = o.store || 'Unknown';
       map[name] = (map[name] || 0) + (o.price || 0);
     });
     const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
     const max = sorted[0]?.[1] || 1;
     return sorted.map(([name, val]) => ({ name, val, percent: (val / max) * 100 }));
-  }, [orders]);
+  }, [filteredOrders]);
 
   const statusStats = useMemo(() => {
     const map: Record<OrderStatus, number> = {
@@ -49,11 +107,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, orders, currencyConte
       [OrderStatus.DELIVERED]: 0,
       [OrderStatus.CANCELLED]: 0,
     };
-    orders.forEach(o => {
+    filteredOrders.forEach(o => {
       if (map[o.status] !== undefined) map[o.status]++;
     });
     return map;
-  }, [orders]);
+  }, [filteredOrders]);
 
   const generateAIInsight = async () => {
     setIsGenerating(true);
@@ -61,9 +119,10 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, orders, currencyConte
       totalRevenue: stats.revenue,
       totalProfit: stats.profit,
       currency: currencyContext.primary,
-      orderCount: orders.length,
-      stores: Array.from(new Set(orders.map(o => o.store))),
-      language: language === 'vi' ? 'Vietnamese' : 'English'
+      orderCount: filteredOrders.length,
+      stores: Array.from(new Set(filteredOrders.map(o => o.store))),
+      language: language === 'vi' ? 'Vietnamese' : 'English',
+      timeframe: timeFilter
     };
     const insight = await getBusinessInsights(dataSummary);
     setAiInsights(insight);
@@ -78,6 +137,12 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, orders, currencyConte
           <p className="text-slate-500 dark:text-slate-400 text-sm">
             {t.realTimeReport} ({currencyContext.primary}) {currencyContext.show ? `& ${currencyContext.secondary}` : ''}.
           </p>
+        </div>
+        <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+           <FilterButton active={timeFilter === 'Today'} onClick={() => setTimeFilter('Today')} label={t.today} />
+           <FilterButton active={timeFilter === 'Last7Days'} onClick={() => setTimeFilter('Last7Days')} label={t.last7Days} />
+           <FilterButton active={timeFilter === 'ThisMonth'} onClick={() => setTimeFilter('ThisMonth')} label={t.thisMonth} />
+           <FilterButton active={timeFilter === 'All'} onClick={() => setTimeFilter('All')} label={t.allTime} />
         </div>
         <div className="flex items-center gap-3">
           <button 
@@ -215,7 +280,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, orders, currencyConte
                     <button onClick={() => onNavigate('orders')} className="text-primary text-[10px] font-bold uppercase tracking-widest hover:underline">{t.viewAll}</button>
                 </div>
                 <div className="space-y-4">
-                    {orders.slice(0, 8).map(order => (
+                    {filteredOrders.slice(0, 8).map(order => (
                     <div key={order.id} className="flex items-center gap-4 p-3 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-colors cursor-pointer group border border-transparent hover:border-slate-100 dark:hover:border-slate-700" onClick={() => onNavigate('detail', order.id)}>
                         <div className="relative shrink-0">
                             <img src={order.customerAvatar} className="size-10 rounded-full border dark:border-slate-700" alt={order.customerName} />
@@ -235,7 +300,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, orders, currencyConte
                         </div>
                     </div>
                     ))}
-                    {orders.length === 0 && <p className="text-center text-slate-400 py-10 text-xs">Waiting for synced data...</p>}
+                    {filteredOrders.length === 0 && <p className="text-center text-slate-400 py-10 text-xs">No data for this period.</p>}
                 </div>
             </div>
         </div>
@@ -243,6 +308,15 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate, orders, currencyConte
     </div>
   );
 };
+
+const FilterButton: React.FC<{ active: boolean, onClick: () => void, label: string }> = ({ active, onClick, label }) => (
+  <button 
+    onClick={onClick}
+    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${active ? 'bg-white dark:bg-slate-900 text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+  >
+    {label}
+  </button>
+);
 
 const StatusSummaryItem: React.FC<{ label: string, count: number, color: string }> = ({ label, count, color }) => (
     <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl flex flex-col items-center justify-center text-center space-y-1">
